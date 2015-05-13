@@ -849,6 +849,10 @@ Lint/DefEndAlignment:
     - def
   AutoCorrect: false
 
+# Checks for unused method arguments.  
+Lint/UnusedMethodArguments:
+  AllowUnusedKeywordArguments: false
+
 ##################### Rails ##################################
 
 Rails/ActionFilter:
