@@ -1721,6 +1721,49 @@ RSpec.describe 'RuboCop::CLI --auto-gen-config', :isolated_environment do # rubo
       expect(cli.run(['--auto-gen-config'])).to eq(0)
     end
 
+    context 'when another project runs --auto-gen-config at the same time' do
+      let(:other_run_started) { [false] }
+
+      before do
+        create_file(
+          'file.rb',
+          [
+            '# frozen_string_literal: true',
+            '',
+            '# A long class',
+            'class TooLong',
+            *Array.new(40) { |i| ["  def method#{i}", "    #{i}", '  end', ''] },
+            'end'
+          ].flatten
+        )
+        FileUtils.mkdir_p('../other_project')
+
+        # Simulate a run in another project, started while this one is
+        # inspecting files, that records a much larger `Max`.
+        allow(RuboCop::ExcludeLimit).to receive(:read_limits).and_wrap_original do |original, *args|
+          unless other_run_started.first
+            other_run_started[0] = true
+            this_run_dir = RuboCop::ExcludeLimit.tmp_dir
+            Dir.chdir('../other_project') do
+              other_env = RuboCop::CLI::Environment.new({}, RuboCop::ConfigStore.new, [])
+              other_run = RuboCop::CLI::Command::AutoGenerateConfig.new(other_env)
+              other_run.send(:reset_auto_gen_tmp_dir)
+              other_dir = other_run.send(:auto_gen_tmp_dir)
+              other_dir.join('Metrics-ClassLength').mkpath
+              other_dir.join('Metrics-ClassLength', 'Max').write("1000\n", mode: 'a')
+            end
+            RuboCop::ExcludeLimit.tmp_dir = this_run_dir
+          end
+          original.call(*args)
+        end
+      end
+
+      it 'does not use the exclude limits recorded by the other project' do
+        expect(cli.run(['--auto-gen-config'])).to eq(0)
+        expect(YAML.load_file('.rubocop_todo.yml')['Metrics/ClassLength']).to eq('Max' => 120)
+      end
+    end
+
     context 'when Max configuration is overridden in .rubocop.yml' do
       it 'generates Exclude instead of Max' do
         create_file('.rubocop.yml', <<~YAML)
