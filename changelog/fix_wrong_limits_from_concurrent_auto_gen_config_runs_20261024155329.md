@@ -1,1 +1,1 @@
-* Fix wrong limits in `.rubocop_todo.yml` when several `--auto-gen-config` runs happen at the same time on one machine. ([@apiology][])
+* Fix wrong limits in `.rubocop_todo.yml` when `--auto-gen-config` runs at the same time in different projects on one machine. ([@apiology][])

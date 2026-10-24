@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'tmpdir'
-
 module RuboCop
   class CLI
     module Command
@@ -27,11 +25,13 @@ module RuboCop
         def run
           add_formatter
           use_temporary_cache
+          reset_auto_gen_tmp_dir
           reset_config_and_auto_gen_file
           line_length_contents = maybe_run_line_length_cop
-          run_all_cops(line_length_contents)
+          result = run_all_cops(line_length_contents)
+          reset_auto_gen_tmp_dir
+          result
         ensure
-          @auto_gen_tmp_dir&.rmtree
           # `auto_gen_tmp_dir` points `ExcludeLimit.tmp_dir` at this command's
           # tmp directory. Clear that process-global state on the way out so
           # later in-process callers (e.g. other specs in the same test worker)
@@ -48,16 +48,18 @@ module RuboCop
           @options[:cache_root] = auto_gen_tmp_dir.join('cache').to_s
         end
 
-        # Each run gets its own directory so that concurrent runs on the same
-        # machine don't overwrite each other's exclude limit values.
+        def reset_auto_gen_tmp_dir
+          auto_gen_tmp_dir.rmtree if auto_gen_tmp_dir.exist?
+          auto_gen_tmp_dir.mkpath
+        end
+
         def auto_gen_tmp_dir
-          @auto_gen_tmp_dir ||= begin
-            root = RuboCop::CacheConfig.root_dir_from_toplevel_config
-            FileUtils.mkdir_p(root)
-            path = Pathname.new(Dir.mktmpdir('auto-gen-tmp-', root))
+          @auto_gen_tmp_dir ||= Pathname.new(
+            RuboCop::CacheConfig.root_dir_from_toplevel_config
+          ).join("auto-gen-tmp-#{Digest::SHA1.hexdigest(Dir.pwd)}").tap do |path|
+            path.mkpath
             # Set the temp directory path for ExcludeLimit to use
             RuboCop::ExcludeLimit.tmp_dir = path
-            path
           end
         end
 
